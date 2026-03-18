@@ -1,5 +1,5 @@
 use crate::{
-    Capslock, KeyDownEvent, KeyUpEvent, Keystroke, MagnifyEvent, Modifiers,
+    Capslock, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers,
     ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
     MousePressureEvent, MouseUpEvent, NavigationDirection, Pixels, PlatformInput, PressureStage,
     ScrollDelta, ScrollWheelEvent, TouchPhase,
@@ -317,13 +317,13 @@ impl PlatformInput {
                         NSEventPhase::NSEventPhaseEnded => TouchPhase::Ended,
                         _ => TouchPhase::Moved,
                     };
-                    Self::Magnify(MagnifyEvent {
+                    Self::Pinch(crate::PinchEvent {
                         position: point(
                             px(native_event.locationInWindow().x as f32),
                             window_height - px(native_event.locationInWindow().y as f32),
                         ),
-                        magnification: native_event.magnification() as f32,
-                        touch_phase: phase,
+                        delta: native_event.magnification() as f32,
+                        phase,
                         modifiers: read_modifiers(native_event),
                     })
                 }),

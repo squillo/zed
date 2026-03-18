@@ -19,7 +19,7 @@ use crate::{
     AbsoluteLength, Action, AnyDrag, AnyElement, AnyTooltip, AnyView, App, Bounds, ClickEvent,
     DispatchPhase, Display, Element, ElementId, Entity, FocusHandle, Global, GlobalElementId,
     Hitbox, HitboxBehavior, HitboxId, InspectorElementId, IntoElement, IsZero, KeyContext,
-    KeyDownEvent, KeyUpEvent, KeyboardButton, KeyboardClickEvent, LayoutId, MagnifyEvent,
+    KeyDownEvent, KeyUpEvent, KeyboardButton, KeyboardClickEvent, LayoutId, PinchEvent,
     ModifiersChangedEvent, MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent,
     MousePressureEvent, MouseUpEvent, Overflow, ParentElement, Pixels, Point, Render,
     ScrollWheelEvent, SharedString, Size, Style, StyleRefinement, Styled, Task, TooltipId,
@@ -353,15 +353,16 @@ impl Interactivity {
             }));
     }
 
-    /// Bind the given callback to magnify (pinch-to-zoom) events during the bubble phase.
-    /// The imperative API equivalent to [`InteractiveElement::on_magnify`].
+    /// Bind the given callback to pinch (pinch-to-zoom) events during the bubble phase.
+    /// The imperative API equivalent to [`InteractiveElement::on_pinch`].
     ///
     /// See [`Context::listener`](crate::Context::listener) to get access to a view's state from this callback.
-    pub fn on_magnify(
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub fn on_pinch(
         &mut self,
-        listener: impl Fn(&MagnifyEvent, &mut Window, &mut App) + 'static,
+        listener: impl Fn(&PinchEvent, &mut Window, &mut App) + 'static,
     ) {
-        self.magnify_listeners
+        self.pinch_listeners
             .push(Box::new(move |event, phase, hitbox, window, cx| {
                 if phase == DispatchPhase::Bubble && hitbox.should_handle_scroll(window) {
                     (listener)(event, window, cx);
@@ -369,15 +370,16 @@ impl Interactivity {
             }));
     }
 
-    /// Bind the given callback to magnify (pinch-to-zoom) events during the capture phase.
-    /// The imperative API equivalent to [`InteractiveElement::capture_magnify`].
+    /// Bind the given callback to pinch (pinch-to-zoom) events during the capture phase.
+    /// The imperative API equivalent to [`InteractiveElement::capture_pinch`].
     ///
     /// See [`Context::listener`](crate::Context::listener) to get access to a view's state from this callback.
-    pub fn capture_magnify(
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub fn capture_pinch(
         &mut self,
-        listener: impl Fn(&MagnifyEvent, &mut Window, &mut App) + 'static,
+        listener: impl Fn(&PinchEvent, &mut Window, &mut App) + 'static,
     ) {
-        self.magnify_listeners
+        self.pinch_listeners
             .push(Box::new(move |event, phase, hitbox, window, cx| {
                 if phase == DispatchPhase::Capture && hitbox.should_handle_scroll(window) {
                     (listener)(event, window, cx);
@@ -923,27 +925,29 @@ pub trait InteractiveElement: Sized {
         self
     }
 
-    /// Bind the given callback to magnify (pinch-to-zoom) events during the bubble phase.
-    /// The fluent API equivalent to [`Interactivity::on_magnify`].
+    /// Bind the given callback to pinch (pinch-to-zoom) events during the bubble phase.
+    /// The fluent API equivalent to [`Interactivity::on_pinch`].
     ///
     /// See [`Context::listener`](crate::Context::listener) to get access to a view's state from this callback.
-    fn on_magnify(
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn on_pinch(
         mut self,
-        listener: impl Fn(&MagnifyEvent, &mut Window, &mut App) + 'static,
+        listener: impl Fn(&PinchEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.interactivity().on_magnify(listener);
+        self.interactivity().on_pinch(listener);
         self
     }
 
-    /// Capture magnify (pinch-to-zoom) events before normal dispatch.
-    /// The fluent API equivalent to [`Interactivity::capture_magnify`].
+    /// Capture pinch (pinch-to-zoom) events before normal dispatch.
+    /// The fluent API equivalent to [`Interactivity::capture_pinch`].
     ///
     /// See [`Context::listener`](crate::Context::listener) to get access to a view's state from this callback.
-    fn capture_magnify(
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn capture_pinch(
         mut self,
-        listener: impl Fn(&MagnifyEvent, &mut Window, &mut App) + 'static,
+        listener: impl Fn(&PinchEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.interactivity().capture_magnify(listener);
+        self.interactivity().capture_pinch(listener);
         self
     }
 
@@ -1317,8 +1321,9 @@ pub(crate) type MouseMoveListener =
 pub(crate) type ScrollWheelListener =
     Box<dyn Fn(&ScrollWheelEvent, DispatchPhase, &Hitbox, &mut Window, &mut App) + 'static>;
 
-pub(crate) type MagnifyListener =
-    Box<dyn Fn(&MagnifyEvent, DispatchPhase, &Hitbox, &mut Window, &mut App) + 'static>;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) type PinchListener =
+    Box<dyn Fn(&PinchEvent, DispatchPhase, &Hitbox, &mut Window, &mut App) + 'static>;
 
 pub(crate) type ClickListener = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 
@@ -1640,7 +1645,8 @@ pub struct Interactivity {
     pub(crate) mouse_pressure_listeners: Vec<MousePressureListener>,
     pub(crate) mouse_move_listeners: Vec<MouseMoveListener>,
     pub(crate) scroll_wheel_listeners: Vec<ScrollWheelListener>,
-    pub(crate) magnify_listeners: Vec<MagnifyListener>,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(crate) pinch_listeners: Vec<PinchListener>,
     pub(crate) key_down_listeners: Vec<KeyDownListener>,
     pub(crate) key_up_listeners: Vec<KeyUpListener>,
     pub(crate) modifiers_changed_listeners: Vec<ModifiersChangedListener>,
@@ -1842,7 +1848,7 @@ impl Interactivity {
             || !self.mouse_move_listeners.is_empty()
             || !self.click_listeners.is_empty()
             || !self.scroll_wheel_listeners.is_empty()
-            || !self.magnify_listeners.is_empty()
+            || { #[cfg(any(target_os = "linux", target_os = "macos"))] { !self.pinch_listeners.is_empty() } #[cfg(not(any(target_os = "linux", target_os = "macos")))] { false } }
             || self.drag_listener.is_some()
             || !self.drop_listeners.is_empty()
             || self.tooltip_builder.is_some()
@@ -2210,9 +2216,10 @@ impl Interactivity {
             })
         }
 
-        for listener in self.magnify_listeners.drain(..) {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        for listener in self.pinch_listeners.drain(..) {
             let hitbox = hitbox.clone();
-            window.on_mouse_event(move |event: &MagnifyEvent, phase, window, cx| {
+            window.on_mouse_event(move |event: &PinchEvent, phase, window, cx| {
                 listener(event, phase, &hitbox, window, cx);
             })
         }

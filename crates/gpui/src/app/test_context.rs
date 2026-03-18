@@ -801,17 +801,18 @@ impl VisualTestContext {
         });
     }
 
-    /// Simulate a magnify (pinch-to-zoom) event at the given position
-    pub fn simulate_magnify(
+    /// Simulate a pinch (pinch-to-zoom) event at the given position
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub fn simulate_pinch(
         &mut self,
         position: Point<Pixels>,
-        magnification: f32,
+        delta: f32,
         modifiers: Modifiers,
     ) {
-        self.simulate_event(crate::MagnifyEvent {
+        self.simulate_event(crate::PinchEvent {
             position,
-            magnification,
-            touch_phase: crate::TouchPhase::Moved,
+            delta,
+            phase: crate::TouchPhase::Moved,
             modifiers,
         })
     }
