@@ -149,9 +149,17 @@ impl WgpuContext {
 
     #[cfg(not(target_family = "wasm"))]
     pub fn instance() -> wgpu::Instance {
+        // On Android, the emulator's ranchu Vulkan driver crashes in
+        // vk_common_SetDebugUtilsObjectNameEXT when debug-utils are enabled.
+        // Use empty flags to skip the VK_EXT_debug_utils extension entirely.
+        #[cfg(target_os = "android")]
+        let flags = wgpu::InstanceFlags::empty();
+        #[cfg(not(target_os = "android"))]
+        let flags = wgpu::InstanceFlags::default();
+
         wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN | wgpu::Backends::GL,
-            flags: wgpu::InstanceFlags::default(),
+            flags,
             backend_options: wgpu::BackendOptions::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
         })
