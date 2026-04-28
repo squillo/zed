@@ -141,6 +141,14 @@ pub struct Application(Rc<AppCell>);
 /// Represents an application before it is fully launched. Once your app is
 /// configured, you'll start the app with `App::run`.
 impl Application {
+    /// Extracts the inner `Rc<AppCell>`, consuming the Application.
+    ///
+    /// Used by non-blocking platform implementations (iOS) that need to keep
+    /// the Application alive beyond `Platform::run()` returning.
+    pub fn into_app_cell(self) -> Rc<AppCell> {
+        self.0
+    }
+
     /// Builds an app with a caller-provided platform implementation.
     pub fn with_platform(platform: Rc<dyn Platform>) -> Self {
         Self(App::new_app(
