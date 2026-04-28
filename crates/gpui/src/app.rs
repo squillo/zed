@@ -141,6 +141,15 @@ pub struct Application(Rc<AppCell>);
 /// Represents an application before it is fully launched. Once your app is
 /// configured, you'll start the app with `App::run`.
 impl Application {
+    /// Clones the inner `Rc<AppCell>` without consuming the Application.
+    ///
+    /// Non-blocking platform implementations (iOS) call this before `run()`
+    /// and hold the returned Rc for the process lifetime, preventing the
+    /// AppCell from being deallocated after `run()` returns.
+    pub fn clone_app_cell(&self) -> Rc<AppCell> {
+        self.0.clone()
+    }
+
     /// Builds an app with a caller-provided platform implementation.
     pub fn with_platform(platform: Rc<dyn Platform>) -> Self {
         Self(App::new_app(
