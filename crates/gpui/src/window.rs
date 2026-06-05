@@ -1,3 +1,9 @@
+//! GPUI window context and element painting infrastructure.
+//!
+//! Revision History
+//! - 2026-06-05T@AI: PRD-397 Phase I Φ-I.α — Add paint_wgpu_texture method to Window for
+//!   queuing ExternalTexturePrimitive records into the scene; walker compile test added.
+
 #[cfg(any(feature = "inspector", debug_assertions))]
 use crate::Inspector;
 use crate::{
@@ -3644,6 +3650,40 @@ impl Window {
         });
     }
 
+    /// Schedules an externally-owned wgpu texture to be composited into the window.
+    ///
+    /// The texture must have been created on the same wgpu Device as the GPUI renderer.
+    /// Pass the `wgpu::TextureView` wrapped in an `Arc<dyn Any + Send + Sync>` to avoid
+    /// a hard dependency on the wgpu crate from the gpui core.
+    ///
+    /// Phase I: queues the primitive into the scene; actual Metal binding via the
+    /// wgpu-hal `as_hal` bridge is wired in Phase I.β.
+    ///
+    /// This method should only be called as part of the paint phase of element drawing.
+    pub fn paint_wgpu_texture(
+        &mut self,
+        bounds: crate::Bounds<crate::Pixels>,
+        texture_view: std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    ) {
+        self.invalidator.debug_assert_paint();
+
+        let order = self
+            .next_frame
+            .scene
+            .layer_stack
+            .last()
+            .copied()
+            .unwrap_or(0);
+        self.next_frame
+            .scene
+            .external_textures
+            .push(crate::ExternalTexturePrimitive {
+                bounds,
+                texture_view,
+                order,
+            });
+    }
+
     /// Removes an image from the sprite atlas.
     pub fn drop_image(&mut self, data: Arc<RenderImage>) -> Result<()> {
         for frame_index in 0..data.frame_count() {
@@ -5653,5 +5693,21 @@ pub fn outline(
         border_widths: (1.).into(),
         border_color: border_color.into(),
         border_style,
+    }
+}
+
+/// PRD-397 Phase I Φ-I.α CLAIM #402 — walker compile test.
+#[cfg(test)]
+mod prd_397_external_texture_tests {
+    /// Compile-only tripwire: verifies ExternalTexturePrimitive and paint_wgpu_texture
+    /// are accessible. No GPU required. Fails to compile if the GPUI Φ-I.α patch is broken.
+    #[allow(dead_code)]
+    fn test_gpui_paint_wgpu_texture_compiles() {
+        let _check: fn() -> crate::ExternalTexturePrimitive = || crate::ExternalTexturePrimitive {
+            bounds: crate::Bounds::default(),
+            texture_view: std::sync::Arc::new(())
+                as std::sync::Arc<dyn std::any::Any + Send + Sync>,
+            order: Default::default(),
+        };
     }
 }

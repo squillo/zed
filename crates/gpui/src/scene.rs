@@ -1,5 +1,10 @@
 // todo("windows"): remove
 #![cfg_attr(windows, allow(dead_code))]
+//! Scene primitive types for GPUI rendering.
+//!
+//! Revision History
+//! - 2026-06-05T@AI: PRD-397 Phase I Φ-I.α — Add ExternalTexturePrimitive struct and wire it
+//!   into Scene (external_textures field) for wgpu texture compositing without CPU copy.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -27,7 +32,7 @@ pub type DrawOrder = u32;
 pub struct Scene {
     pub(crate) paint_operations: Vec<PaintOperation>,
     primitive_bounds: BoundsTree<ScaledPixels>,
-    layer_stack: Vec<DrawOrder>,
+    pub(crate) layer_stack: Vec<DrawOrder>,
     pub shadows: Vec<Shadow>,
     pub quads: Vec<Quad>,
     pub paths: Vec<Path<ScaledPixels>>,
@@ -36,6 +41,7 @@ pub struct Scene {
     pub subpixel_sprites: Vec<SubpixelSprite>,
     pub polychrome_sprites: Vec<PolychromeSprite>,
     pub surfaces: Vec<PaintSurface>,
+    pub external_textures: Vec<ExternalTexturePrimitive>,
 }
 
 #[expect(missing_docs)]
@@ -52,6 +58,7 @@ impl Scene {
         self.subpixel_sprites.clear();
         self.polychrome_sprites.clear();
         self.surfaces.clear();
+        self.external_textures.clear();
     }
 
     pub fn len(&self) -> usize {
@@ -132,6 +139,24 @@ impl Scene {
                 PaintOperation::EndLayer => self.pop_layer(),
             }
         }
+    }
+
+    /// Queue an [`ExternalTexturePrimitive`] into the scene at the current layer order.
+    ///
+    /// Unlike [`Scene::insert_primitive`], this method does not require a `ContentMask`
+    /// because the texture occupies its full `bounds` without clipping metadata.
+    /// The draw order is inherited from the top of the layer stack (or 0 if no layer is active).
+    pub fn push_external_texture(
+        &mut self,
+        bounds: crate::Bounds<crate::Pixels>,
+        texture_view: std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    ) {
+        let order = self.layer_stack.last().copied().unwrap_or(0);
+        self.external_textures.push(ExternalTexturePrimitive {
+            bounds,
+            texture_view,
+            order,
+        });
     }
 
     pub fn finish(&mut self) {
@@ -724,6 +749,26 @@ impl From<PaintSurface> for Primitive {
     fn from(surface: PaintSurface) -> Self {
         Primitive::Surface(surface)
     }
+}
+
+/// An externally-owned wgpu texture to be composited into the GPUI window.
+///
+/// The texture_view is held as `Arc<dyn Any + Send + Sync>` to avoid a hard
+/// dependency on the wgpu crate from gpui.  At render time the Metal adapter
+/// downcasts to `wgpu::TextureView` and extracts the underlying MTLTexture via
+/// wgpu-hal.  Phase I: field is accepted and stored; actual Metal binding is
+/// wired in Phase I.β once the wgpu-hal bridge is confirmed.
+#[derive(Clone, Debug)]
+#[allow(missing_docs)]
+pub struct ExternalTexturePrimitive {
+    /// Destination bounds in window-pixel coordinates.
+    pub bounds: crate::Bounds<crate::Pixels>,
+    /// Opaque handle to a `wgpu::TextureView` allocated on the same device as
+    /// the GPUI renderer.  Kept as `Arc<dyn Any + Send + Sync>` so that gpui
+    /// itself does not depend on the wgpu crate.
+    pub texture_view: std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    /// Draw-order assigned by the scene when queued.
+    pub order: DrawOrder,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
